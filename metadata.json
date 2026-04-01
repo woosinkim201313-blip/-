@@ -1,0 +1,5 @@
+{
+  "name": "RedBand",
+  "description": "밴드부 일정, 셋리스트, 멤버 관리를 위한 통합 매니지먼트 앱",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "밴드 멤버의 프로필 정보",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "사용자 고유 ID" },
+        "displayName": { "type": "string", "description": "표시 이름" },
+        "email": { "type": "string", "description": "이메일 주소" },
+        "photoURL": { "type": "string", "description": "프로필 사진 URL" },
+        "instrument": { "type": "string", "description": "담당 악기 (예: 보컬, 기타, 베이스, 드럼, 키보드)" },
+        "role": { "type": "string", "enum": ["admin", "member"], "description": "권한" },
+        "joinedAt": { "type": "string", "format": "date-time", "description": "가입일" }
+      },
+      "required": ["uid", "displayName", "email"]
+    },
+    "Schedule": {
+      "title": "Band Schedule",
+      "description": "연습 및 공연 일정",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "일정 제목" },
+        "description": { "type": "string", "description": "상세 내용" },
+        "date": { "type": "string", "format": "date-time", "description": "일시" },
+        "location": { "type": "string", "description": "장소" },
+        "type": { "type": "string", "enum": ["practice", "performance", "meeting", "other"], "description": "일정 유형" },
+        "createdBy": { "type": "string", "description": "작성자 UID" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "작성일" }
+      },
+      "required": ["title", "date", "type", "createdBy"]
+    },
+    "Song": {
+      "title": "Setlist Song",
+      "description": "셋리스트에 포함된 곡 정보",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "곡 제목" },
+        "artist": { "type": "string", "description": "아티스트" },
+        "status": { "type": "string", "enum": ["backlog", "practicing", "mastered"], "description": "진행 상태" },
+        "bpm": { "type": "number", "description": "BPM" },
+        "key": { "type": "string", "description": "곡의 키" },
+        "link": { "type": "string", "description": "참고 링크 (유튜브 등)" },
+        "notes": { "type": "string", "description": "메모" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "최종 수정일" }
+      },
+      "required": ["title", "artist", "status"]
+    },
+    "Announcement": {
+      "title": "Band Announcement",
+      "description": "밴드 공지사항",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "공지 제목" },
+        "content": { "type": "string", "description": "공지 내용" },
+        "link": { "type": "string", "description": "외부 링크 (URL)" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "작성일" },
+        "createdBy": { "type": "string", "description": "작성자 UID" }
+      },
+      "required": ["title", "content", "createdBy"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "사용자 프로필 컬렉션"
+    },
+    "schedules": {
+      "schema": "Schedule",
+      "description": "밴드 일정 컬렉션"
+    },
+    "songs": {
+      "schema": "Song",
+      "description": "셋리스트 곡 컬렉션"
+    },
+    "announcements": {
+      "schema": "Announcement",
+      "description": "공지사항 컬렉션"
+    }
+  }
+}
