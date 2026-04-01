@@ -28,18 +28,22 @@ service cloud.firestore {
     }
 
     function isValidSchedule(data) {
-      return data.keys().hasAll(['title', 'date', 'type', 'createdBy']) &&
+      return data.keys().hasAll(['title', 'type', 'createdBy']) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
-             data.date is string &&
+             (!('date' in data) || data.date is string) &&
              data.type in ['practice', 'performance', 'meeting', 'other'] &&
              data.createdBy is string;
     }
 
     function isValidSong(data) {
       return data.keys().hasAll(['title', 'artist', 'status']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
-             data.artist is string && data.artist.size() > 0 && data.artist.size() < 100 &&
-             data.status in ['backlog', 'practicing', 'mastered'];
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.artist is string && data.artist.size() > 0 && data.artist.size() < 200 &&
+             data.status in ['backlog', 'practicing', 'mastered'] &&
+             (!('bpm' in data) || data.bpm is number || data.bpm == null) &&
+             (!('key' in data) || (data.key is string && data.key.size() < 20)) &&
+             (!('link' in data) || (data.link is string && data.link.size() < 500)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() < 2000));
     }
 
     function isValidAnnouncement(data) {

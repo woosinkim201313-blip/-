@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { useState, useEffect, FormEvent } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -25,11 +26,120 @@ import {
   ShieldCheck,
   ExternalLink,
   Trash2,
-  Terminal
+  Terminal,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, isAfter, parseISO } from 'date-fns';
+import { format, isAfter, parseISO, isValid } from 'date-fns';
 import { ko } from 'date-fns/locale';
+
+// --- Types ---
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string;
+    email?: string | null;
+    emailVerified?: boolean;
+    isAnonymous?: boolean;
+    tenantId?: string | null;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let errorMessage = "알 수 없는 오류가 발생했습니다.";
+      try {
+        if (this.state.error?.message) {
+          const parsed = JSON.parse(this.state.error.message);
+          if (parsed.error) errorMessage = `데이터베이스 오류: ${parsed.error}`;
+        }
+      } catch (e) {
+        errorMessage = this.state.error?.message || errorMessage;
+      }
+
+      return (
+        <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-20 h-20 bg-red-500/20 text-red-500 rounded-3xl flex items-center justify-center mb-6">
+            <AlertTriangle size={40} />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">문제가 발생했습니다</h2>
+          <p className="text-zinc-500 mb-8 max-w-md">{errorMessage}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="bg-white text-black font-bold px-8 py-3 rounded-2xl hover:bg-zinc-200 transition-all"
+          >
+            새로고침
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 // --- Types ---
 type Tab = 'dashboard' | 'schedules' | 'setlist' | 'members' | 'admin';
@@ -72,6 +182,18 @@ interface Announcement {
   createdAt: any;
   createdBy: string;
 }
+
+// --- Utilities ---
+
+const safeParseISO = (dateStr: string) => {
+  if (!dateStr) return null;
+  try {
+    const date = parseISO(dateStr);
+    return isValid(date) ? date : null;
+  } catch (e) {
+    return null;
+  }
+};
 
 // --- Components ---
 
@@ -181,8 +303,19 @@ const Sidebar = ({ activeTab, setActiveTab, user, onEditProfile, onAdminClick }:
 
 const Dashboard = ({ schedules, songs, members, announcements }: { schedules: Schedule[], songs: Song[], members: UserProfile[], announcements: Announcement[] }) => {
   const upcomingSchedules = schedules
-    .filter(s => isAfter(parseISO(s.date), new Date()))
-    .sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
+    .filter(s => {
+      const date = safeParseISO(s.date);
+      if (!date) return true; // Include non-standard dates as "upcoming"
+      return isAfter(date, new Date());
+    })
+    .sort((a, b) => {
+      const dateA = safeParseISO(a.date);
+      const dateB = safeParseISO(b.date);
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1;
+      if (!dateB) return -1;
+      return dateA.getTime() - dateB.getTime();
+    })
     .slice(0, 3);
 
   const masteredSongs = songs.filter(s => s.status === 'mastered').length;
@@ -261,21 +394,33 @@ const Dashboard = ({ schedules, songs, members, announcements }: { schedules: Sc
             </h3>
           </div>
           <div className="p-6 space-y-4">
-            {upcomingSchedules.length > 0 ? upcomingSchedules.map(schedule => (
-              <div key={schedule.id} className="flex gap-4 p-4 bg-zinc-950 rounded-xl border border-zinc-800">
-                <div className="flex flex-col items-center justify-center bg-red-600/10 text-red-600 w-14 h-14 rounded-lg font-bold">
-                  <span className="text-xs uppercase">{format(parseISO(schedule.date), 'MMM', { locale: ko })}</span>
-                  <span className="text-xl leading-none">{format(parseISO(schedule.date), 'd')}</span>
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-bold">{schedule.title}</h4>
-                  <div className="flex items-center gap-3 text-xs text-zinc-500 mt-1">
-                    <span className="flex items-center gap-1"><Clock size={12} /> {format(parseISO(schedule.date), 'HH:mm')}</span>
-                    {schedule.location && <span className="flex items-center gap-1"><MapPin size={12} /> {schedule.location}</span>}
+            {upcomingSchedules.length > 0 ? upcomingSchedules.map(schedule => {
+              const date = safeParseISO(schedule.date);
+              return (
+                <div key={schedule.id} className="flex gap-4 p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+                  <div className="flex flex-col items-center justify-center bg-red-600/10 text-red-600 w-14 h-14 rounded-lg font-bold">
+                    {date ? (
+                      <>
+                        <span className="text-xs uppercase">{format(date, 'MMM', { locale: ko })}</span>
+                        <span className="text-xl leading-none">{format(date, 'd')}</span>
+                      </>
+                    ) : (
+                      <Calendar size={20} />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold">{schedule.title}</h4>
+                    <div className="flex items-center gap-3 text-xs text-zinc-500 mt-1">
+                      <span className="flex items-center gap-1">
+                        <Clock size={12} /> 
+                        {date ? format(date, 'HH:mm') : schedule.date || '시간 미정'}
+                      </span>
+                      {schedule.location && <span className="flex items-center gap-1"><MapPin size={12} /> {schedule.location}</span>}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )) : (
+              );
+            }) : (
               <p className="text-center py-8 text-zinc-500 text-sm italic">예정된 일정이 없습니다.</p>
             )}
           </div>
@@ -301,9 +446,7 @@ const Dashboard = ({ schedules, songs, members, announcements }: { schedules: Sc
                     <p className="text-xs text-zinc-500">{song.artist}</p>
                   </div>
                 </div>
-                <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-600 group-hover:text-zinc-400">
-                  {song.status}
-                </span>
+                <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">{song.status}</span>
               </div>
             ))}
           </div>
@@ -319,20 +462,28 @@ const ScheduleList = ({ schedules, isAdmin }: { schedules: Schedule[], isAdmin: 
 
   const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newSchedule.title || !newSchedule.date) return;
+    if (!newSchedule.title) return;
     
-    await addDoc(collection(db, 'schedules'), {
-      ...newSchedule,
-      createdBy: auth.currentUser?.uid,
-      createdAt: serverTimestamp()
-    });
-    setIsAdding(false);
-    setNewSchedule({ title: '', date: '', location: '', type: 'practice' });
+    try {
+      await addDoc(collection(db, 'schedules'), {
+        ...newSchedule,
+        createdBy: auth.currentUser?.uid,
+        createdAt: serverTimestamp()
+      });
+      setIsAdding(false);
+      setNewSchedule({ title: '', date: '', location: '', type: 'practice' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'schedules');
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('이 일정을 삭제하시겠습니까?')) return;
-    await deleteDoc(doc(db, 'schedules', id));
+    try {
+      await deleteDoc(doc(db, 'schedules', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `schedules/${id}`);
+    }
   };
 
   return (
@@ -351,45 +502,68 @@ const ScheduleList = ({ schedules, isAdmin }: { schedules: Schedule[], isAdmin: 
       </header>
 
       <div className="grid grid-cols-1 gap-4">
-        {schedules.sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()).map(schedule => (
-          <div key={schedule.id} className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col md:flex-row md:items-center gap-6">
-            <div className="flex flex-col items-center justify-center bg-zinc-950 border border-zinc-800 w-20 h-20 rounded-2xl font-bold shrink-0">
-              <span className="text-xs text-zinc-500 uppercase">{format(parseISO(schedule.date), 'MMM', { locale: ko })}</span>
-              <span className="text-2xl text-red-600">{format(parseISO(schedule.date), 'd')}</span>
-              <span className="text-[10px] text-zinc-600">{format(parseISO(schedule.date), 'EEE', { locale: ko })}</span>
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className={cn(
-                  "text-[10px] uppercase font-black px-2 py-0.5 rounded border",
-                  schedule.type === 'practice' ? "border-red-600/30 text-red-600 bg-red-600/5" :
-                  schedule.type === 'performance' ? "border-red-500/30 text-red-500 bg-red-500/5" :
-                  "border-zinc-700 text-zinc-500 bg-zinc-800"
-                )}>
-                  {schedule.type}
-                </span>
-                <h3 className="text-lg font-bold">{schedule.title}</h3>
+        {[...schedules].sort((a, b) => {
+          const dateA = safeParseISO(a.date);
+          const dateB = safeParseISO(b.date);
+          if (!dateA && !dateB) return 0;
+          if (!dateA) return 1;
+          if (!dateB) return -1;
+          return dateB.getTime() - dateA.getTime();
+        }).map(schedule => {
+          const date = safeParseISO(schedule.date);
+
+          return (
+            <div key={schedule.id} className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col md:flex-row md:items-center gap-6">
+              <div className="flex flex-col items-center justify-center bg-zinc-950 border border-zinc-800 w-20 h-20 rounded-2xl font-bold shrink-0">
+                {date ? (
+                  <>
+                    <span className="text-xs text-zinc-500 uppercase">{format(date, 'MMM', { locale: ko })}</span>
+                    <span className="text-2xl text-red-600">{format(date, 'd')}</span>
+                    <span className="text-[10px] text-zinc-600">{format(date, 'EEE', { locale: ko })}</span>
+                  </>
+                ) : (
+                  <>
+                    <Calendar size={24} className="text-zinc-700 mb-1" />
+                    <span className="text-[10px] text-zinc-500 uppercase">미정</span>
+                  </>
+                )}
               </div>
-              <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-500">
-                <span className="flex items-center gap-1.5"><Clock size={14} className="text-zinc-600" /> {format(parseISO(schedule.date), 'HH:mm')}</span>
-                {schedule.location && <span className="flex items-center gap-1.5"><MapPin size={14} className="text-zinc-600" /> {schedule.location}</span>}
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={cn(
+                    "text-[10px] uppercase font-black px-2 py-0.5 rounded border",
+                    schedule.type === 'practice' ? "border-red-600/30 text-red-600 bg-red-600/5" :
+                    schedule.type === 'performance' ? "border-red-500/30 text-red-500 bg-red-500/5" :
+                    "border-zinc-700 text-zinc-500 bg-zinc-800"
+                  )}>
+                    {schedule.type}
+                  </span>
+                  <h3 className="text-lg font-bold">{schedule.title}</h3>
+                </div>
+                <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-500">
+                  <span className="flex items-center gap-1.5">
+                    <Clock size={14} className="text-zinc-600" /> 
+                    {date ? format(date, 'HH:mm') : schedule.date || '시간 미정'}
+                  </span>
+                  {schedule.location && <span className="flex items-center gap-1.5"><MapPin size={14} className="text-zinc-600" /> {schedule.location}</span>}
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {(isAdmin || schedule.createdBy === auth.currentUser?.uid) && (
-                <button 
-                  onClick={() => handleDelete(schedule.id)}
-                  className="p-2 hover:bg-red-500/10 text-zinc-600 hover:text-red-500 rounded-lg transition-colors"
-                >
-                  <LogOut size={16} className="rotate-180" />
+              <div className="flex items-center gap-2">
+                {(isAdmin || schedule.createdBy === auth.currentUser?.uid) && (
+                  <button 
+                    onClick={() => handleDelete(schedule.id)}
+                    className="p-2 hover:bg-red-500/10 text-zinc-600 hover:text-red-500 rounded-lg transition-colors"
+                  >
+                    <LogOut size={16} className="rotate-180" />
+                  </button>
+                )}
+                <button className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors">
+                  <MoreVertical size={18} />
                 </button>
-              )}
-              <button className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors">
-                <MoreVertical size={18} />
-              </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <AnimatePresence>
@@ -418,13 +592,13 @@ const ScheduleList = ({ schedules, isAdmin }: { schedules: Schedule[], isAdmin: 
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">일시</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">일시 (선택)</label>
                     <input 
-                      type="datetime-local" 
-                      required
+                      type="text" 
                       value={newSchedule.date}
                       onChange={e => setNewSchedule({...newSchedule, date: e.target.value})}
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-600 transition-colors"
+                      placeholder="2024-04-01 19:00 또는 자유 입력"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -492,24 +666,32 @@ const Setlist = ({ songs, isAdmin }: { songs: Song[], isAdmin: boolean }) => {
     e.preventDefault();
     if (!newSong.title || !newSong.artist) return;
     
-    await addDoc(collection(db, 'songs'), {
-      ...newSong,
-      updatedAt: serverTimestamp()
-    });
-    setIsAdding(false);
-    setNewSong({ title: '', artist: '', status: 'backlog', link: '', bpm: undefined, key: '', notes: '' });
+    try {
+      await addDoc(collection(db, 'songs'), {
+        ...newSong,
+        updatedAt: serverTimestamp()
+      });
+      setIsAdding(false);
+      setNewSong({ title: '', artist: '', status: 'backlog', link: '', bpm: undefined, key: '', notes: '' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'songs');
+    }
   };
 
   const handleUpdate = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingSong) return;
     
-    const { id, ...data } = editingSong;
-    await updateDoc(doc(db, 'songs', id), {
-      ...data,
-      updatedAt: serverTimestamp()
-    });
-    setEditingSong(null);
+    try {
+      const { id, ...data } = editingSong;
+      await updateDoc(doc(db, 'songs', id), {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      setEditingSong(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `songs/${editingSong.id}`);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -1150,6 +1332,14 @@ const AdminServer = ({ members, announcements, onExit }: { members: UserProfile[
 };
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [user, loading] = useAuthState(auth);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -1203,21 +1393,29 @@ export default function App() {
     const qSchedules = query(collection(db, 'schedules'), orderBy('date', 'asc'));
     const unsubSchedules = onSnapshot(qSchedules, (snap) => {
       setSchedules(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Schedule)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'schedules');
     });
 
     const qSongs = query(collection(db, 'songs'), orderBy('updatedAt', 'desc'));
     const unsubSongs = onSnapshot(qSongs, (snap) => {
       setSongs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Song)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'songs');
     });
 
     const qMembers = query(collection(db, 'users'));
     const unsubMembers = onSnapshot(qMembers, (snap) => {
       setMembers(snap.docs.map(doc => doc.data() as UserProfile));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'users');
     });
 
     const qAnnouncements = query(collection(db, 'announcements'), orderBy('createdAt', 'desc'));
     const unsubAnnouncements = onSnapshot(qAnnouncements, (snap) => {
       setAnnouncements(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Announcement)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'announcements');
     });
 
     return () => {
