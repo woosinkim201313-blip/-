@@ -341,8 +341,8 @@ const Dashboard = ({ schedules, songs, members, announcements }: { schedules: Sc
             <div className="space-y-4">
               {announcements.slice(0, 2).map(ann => (
                 <div key={ann.id} className="space-y-2">
-                  <h4 className="text-lg font-bold text-white">{ann.title}</h4>
-                  <p className="text-sm text-zinc-400 line-clamp-2">{ann.content}</p>
+                  <h4 className="text-lg font-bold text-white"><span>{ann.title}</span></h4>
+                  <p className="text-sm text-zinc-400 line-clamp-2"><span>{ann.content}</span></p>
                   {ann.link && (
                     <a 
                       href={ann.link} 
@@ -362,14 +362,14 @@ const Dashboard = ({ schedules, songs, members, announcements }: { schedules: Sc
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
-          <p className="text-sm text-zinc-500 font-medium mb-1">다음 일정</p>
-          <p className="text-2xl font-bold">{upcomingSchedules.length}개 예정</p>
+          <p className="text-sm text-zinc-500 font-medium mb-1"><span>다음 일정</span></p>
+          <p className="text-2xl font-bold"><span>{upcomingSchedules.length}개 예정</span></p>
         </div>
         <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
-          <p className="text-sm text-zinc-500 font-medium mb-1">셋리스트 완성도</p>
+          <p className="text-sm text-zinc-500 font-medium mb-1"><span>셋리스트 완성도</span></p>
           <div className="flex items-end gap-2">
-            <p className="text-2xl font-bold">{Math.round(progress)}%</p>
-            <p className="text-sm text-zinc-500 mb-1">({masteredSongs}/{songs.length})</p>
+            <p className="text-2xl font-bold"><span>{Math.round(progress)}%</span></p>
+            <p className="text-sm text-zinc-500 mb-1"><span>({masteredSongs}/{songs.length})</span></p>
           </div>
           <div className="w-full bg-zinc-800 h-1.5 rounded-full mt-3 overflow-hidden">
             <motion.div 
@@ -380,8 +380,8 @@ const Dashboard = ({ schedules, songs, members, announcements }: { schedules: Sc
           </div>
         </div>
         <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
-          <p className="text-sm text-zinc-500 font-medium mb-1">등록된 멤버</p>
-          <p className="text-2xl font-bold">{members.length}명</p>
+          <p className="text-sm text-zinc-500 font-medium mb-1"><span>등록된 멤버</span></p>
+          <p className="text-2xl font-bold"><span>{members.length}명</span></p>
         </div>
       </div>
 
@@ -538,14 +538,14 @@ const ScheduleList = ({ schedules, isAdmin }: { schedules: Schedule[], isAdmin: 
                   )}>
                     {schedule.type}
                   </span>
-                  <h3 className="text-lg font-bold">{schedule.title}</h3>
+                  <h3 className="text-lg font-bold"><span>{schedule.title}</span></h3>
                 </div>
                 <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-500">
                   <span className="flex items-center gap-1.5">
                     <Clock size={14} className="text-zinc-600" /> 
-                    {date ? format(date, 'HH:mm') : schedule.date || '시간 미정'}
+                    <span>{date ? format(date, 'HH:mm') : schedule.date || '시간 미정'}</span>
                   </span>
-                  {schedule.location && <span className="flex items-center gap-1.5"><MapPin size={14} className="text-zinc-600" /> {schedule.location}</span>}
+                  {schedule.location && <span className="flex items-center gap-1.5"><MapPin size={14} className="text-zinc-600" /> <span>{schedule.location}</span></span>}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -566,10 +566,11 @@ const ScheduleList = ({ schedules, isAdmin }: { schedules: Schedule[], isAdmin: 
         })}
       </div>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isAdding && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div key="add-schedule-modal" className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <motion.div 
+              key="add-schedule-content"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -815,8 +816,8 @@ const Setlist = ({ songs, isAdmin }: { songs: Song[], isAdmin: boolean }) => {
             <div key={song.id} className="p-6 space-y-4">
               <div className="flex justify-between items-start gap-4">
                 <div onClick={() => setEditingSong(song)} className="flex-1 min-w-0">
-                  <h4 className="font-bold text-lg truncate active:text-red-500 transition-colors">{song.title}</h4>
-                  <p className="text-sm text-zinc-500">{song.artist}</p>
+                  <h4 className="font-bold text-lg truncate active:text-red-500 transition-colors"><span>{song.title}</span></h4>
+                  <p className="text-sm text-zinc-500"><span>{song.artist}</span></p>
                 </div>
                 <button 
                   onClick={() => handleToggleStatus(song)}
@@ -863,10 +864,11 @@ const Setlist = ({ songs, isAdmin }: { songs: Song[], isAdmin: boolean }) => {
         </div>
       </div>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isAdding && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div key="add-song-modal" className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <motion.div 
+              key="add-song-content"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -972,8 +974,9 @@ const Setlist = ({ songs, isAdmin }: { songs: Song[], isAdmin: boolean }) => {
         )}
 
         {editingSong && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div key="edit-song-modal" className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <motion.div 
+              key="edit-song-content"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -1274,10 +1277,11 @@ const AdminServer = ({ members, announcements, onExit }: { members: UserProfile[
         </div>
       </div>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isAddingAnn && (
-          <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div key="add-announcement-modal" className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <motion.div 
+              key="add-announcement-content"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
@@ -1573,10 +1577,11 @@ function AppContent() {
         </AnimatePresence>
       </main>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isAdminPasswordModalOpen && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div key="admin-password-modal" className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
             <motion.div 
+              key="admin-password-content"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -1619,8 +1624,9 @@ function AppContent() {
         )}
 
         {isProfileModalOpen && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div key="profile-modal" className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
             <motion.div 
+              key="profile-content"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
